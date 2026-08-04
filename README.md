@@ -22,6 +22,48 @@ visibility into what the others have already counted.
 rate limiting that stays correct and consistent across multiple replicas,
 regardless of which instance handles a given request.
 
+### How it solves it
+
+The rate limit (100 req/s per company, identified by the `X-API-Key`
+header) lives in Redis, not process memory: every replica shares the same
+counter for a given key. The algorithm is a **Sliding Window Counter**,
+applied atomically via a Lua script (`EVAL`) in a single Redis round trip,
+so two replicas can never both read a stale count before either
+increments it.
+
+### Architecture
+
+Lightweight hexagonal layout:
+
+- `internal/domain` — ports (interfaces) and entities: `URLRepository`,
+  `RateLimiter`, `WindowCounter`.
+- `internal/usecase` — pure business logic (`CreateShortURL`, `Resolve`,
+  the sliding window algorithm), unit-testable without a real Postgres or
+  Redis.
+- `internal/adapter` — real implementations: `postgres/`, `redis/`,
+  `http/`.
+
+### Quickstart
+
+```bash
+cp .env.example .env
+docker compose up --build
+```
+
+```bash
+curl -X POST http://localhost:8080/shorten \
+  -H "X-API-Key: acme" -H "Content-Type: application/json" \
+  -d '{"url":"https://example.com/some/long/path"}'
+# -> {"shortcode":"aZ3xQ9b","short_url":"http://localhost:8080/aZ3xQ9b", ...}
+
+curl -i -H "X-API-Key: acme" http://localhost:8080/aZ3xQ9b
+# -> 302 Found, Location: https://example.com/some/long/path
+```
+
+Interactive docs (Swagger UI) at `http://localhost:8080/docs`.
+
+Tests: `make test` (equivalent to `go test -race -cover ./...`).
+
 ---
 
 ## Español
@@ -54,6 +96,8 @@ comparten el mismo contador para una misma llave. El algoritmo es un
 (`EVAL`) en un único round-trip a Redis, para que dos réplicas nunca lean
 un conteo obsoleto antes de que la otra lo incremente.
 
+### Arquitectura
+
 Arquitectura hexagonal ligera:
 
 - `internal/domain` — puertos (interfaces) y entidades: `URLRepository`,
@@ -83,30 +127,3 @@ curl -i -H "X-API-Key: acme" http://localhost:8080/aZ3xQ9b
 Documentación interactiva (Swagger UI) en `http://localhost:8080/docs`.
 
 Tests: `make test` (equivalente a `go test -race -cover ./...`).
-
----
-
-## English (quickstart)
-
-The rate limit (100 req/s per company, identified by the `X-API-Key`
-header) lives in Redis, not process memory: every replica shares the same
-counter for a given key. The algorithm is a **Sliding Window Counter**,
-applied atomically via a Lua script (`EVAL`) in a single Redis round trip,
-so two replicas can never both read a stale count before either
-increments it.
-
-```bash
-cp .env.example .env
-docker compose up --build
-```
-
-```bash
-curl -X POST http://localhost:8080/shorten \
-  -H "X-API-Key: acme" -H "Content-Type: application/json" \
-  -d '{"url":"https://example.com/some/long/path"}'
-
-curl -i -H "X-API-Key: acme" http://localhost:8080/aZ3xQ9b
-```
-
-Interactive docs (Swagger UI) at `http://localhost:8080/docs`. Tests:
-`make test`.
