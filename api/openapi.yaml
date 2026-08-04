@@ -1,0 +1,136 @@
+openapi: 3.0.3
+info:
+  title: linkguard
+  description: >
+    A URL shortener protected by a distributed, Redis-backed rate limiter.
+    Every request must carry an X-API-Key header identifying the calling
+    company; each company gets its own independent rate-limit budget,
+    enforced correctly regardless of how many replicas of this service are
+    running.
+  version: "1.0.0"
+servers:
+  - url: http://localhost:8080
+paths:
+  /shorten:
+    post:
+      summary: Create a short URL
+      operationId: createShortURL
+      parameters:
+        - $ref: "#/components/parameters/ApiKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ShortenRequest"
+      responses:
+        "201":
+          description: Short URL created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ShortenResponse"
+        "400":
+          description: Invalid request body
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Missing X-API-Key header
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "429":
+          description: Rate limit exceeded
+          headers:
+            Retry-After:
+              description: Seconds to wait before retrying
+              schema:
+                type: integer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /{shortcode}:
+    get:
+      summary: Resolve a short URL and redirect to its target
+      operationId: resolveShortURL
+      parameters:
+        - $ref: "#/components/parameters/ApiKey"
+        - name: shortcode
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "302":
+          description: Redirect to the original URL
+          headers:
+            Location:
+              schema:
+                type: string
+        "401":
+          description: Missing X-API-Key header
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Short code not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "429":
+          description: Rate limit exceeded
+          headers:
+            Retry-After:
+              description: Seconds to wait before retrying
+              schema:
+                type: integer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+components:
+  parameters:
+    ApiKey:
+      name: X-API-Key
+      in: header
+      required: true
+      description: >
+        Identifies the calling company. Not a real credential — it only
+        namespaces rate-limit budgets so one company's traffic can never
+        exhaust another's.
+      schema:
+        type: string
+  schemas:
+    ShortenRequest:
+      type: object
+      required: [url]
+      properties:
+        url:
+          type: string
+          format: uri
+          example: https://example.com/some/very/long/path
+    ShortenResponse:
+      type: object
+      properties:
+        shortcode:
+          type: string
+          example: aZ3xQ9b
+        short_url:
+          type: string
+          example: http://localhost:8080/aZ3xQ9b
+        original_url:
+          type: string
+          example: https://example.com/some/very/long/path
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+        message:
+          type: string

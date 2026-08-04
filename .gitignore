@@ -1,0 +1,22 @@
+# Binaries
+/bin/
+/dist/
+*.exe
+*.test
+*.out
+
+# Go build/test artifacts
+coverage.out
+coverage.html
+
+# Env
+.env
+
+# IDE / OS
+.vscode/
+.idea/
+.claude/
+.DS_Store
+
+# Docker
+docker-compose.override.yml

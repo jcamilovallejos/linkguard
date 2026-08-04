@@ -1,0 +1,34 @@
+version: "2"
+linters:
+  enable:
+    - revive
+  settings:
+    revive:
+      rules:
+        - name: exported
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    rules:
+      - linters:
+          - errcheck
+        path: _test\.go
+    paths:
+      - api
+      - third_party$
+      - builtin$
+      - examples$
+formatters:
+  enable:
+    - goimports
+  exclusions:
+    generated: lax
+    paths:
+      - api
+      - third_party$
+      - builtin$
+      - examples$

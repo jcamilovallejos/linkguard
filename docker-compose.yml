@@ -1,0 +1,56 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: linkguard-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-linkguard}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-linkguard}
+      POSTGRES_DB: ${POSTGRES_DB:-linkguard}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - linkguard_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-linkguard}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: linkguard-redis
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: linkguard-app
+    environment:
+      HTTP_PORT: 8080
+      BASE_URL: ${BASE_URL:-http://localhost:8080}
+      POSTGRES_DSN: postgres://${POSTGRES_USER:-linkguard}:${POSTGRES_PASSWORD:-linkguard}@postgres:5432/${POSTGRES_DB:-linkguard}?sslmode=disable
+      REDIS_ADDR: redis:6379
+      RATE_LIMIT: ${RATE_LIMIT:-100}
+      RATE_WINDOW_SECONDS: ${RATE_WINDOW_SECONDS:-1}
+    ports:
+      - "${HTTP_PORT:-8080}:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080/healthz"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  linkguard_postgres_data:
